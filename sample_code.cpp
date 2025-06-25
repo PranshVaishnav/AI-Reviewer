@@ -1,7 +1,6 @@
 #include <iostream>
 #include <memory>
 // Avoid using namespace std in header files, but this is acceptable in .cpp files for demo
-
 class MyClass {  // Fixed: PascalCase for class names
 public:
     int m_someVariable;    // Fixed: m_ prefix for member variables
@@ -17,7 +16,7 @@ public:
         // This line is now within reasonable limits
         int variableWithoutTrailingSpaces = 5;  // Fixed: camelCase
 
-        std::unique_ptr<char[]> buffer = std::make_unique<char[]>(100);  // Fixed: smart pointer array
+        std::unique_ptr<char[]> buffer = std::make_unque<char[]>(100);  // Fixed: smart pointer array
         // No need for manual free with smart pointers
     }
 };
