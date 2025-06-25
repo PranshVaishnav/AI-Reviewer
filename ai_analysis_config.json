@@ -1,0 +1,115 @@
+{
+  "ai_analysis_settings": {
+    "default_provider": "openai",
+    "providers": {
+      "openai": {
+        "model": "gpt-4",
+        "max_tokens": 2000,
+        "temperature": 0.1,
+        "api_key_env": "OPENAI_API_KEY"
+      },
+      "anthropic": {
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 2000,
+        "temperature": 0.1,
+        "api_key_env": "ANTHROPIC_API_KEY"
+      }
+    },
+    "analysis_types": {
+      "bug_detection": {
+        "enabled": true,
+        "priority": "high",
+        "description": "Find potential bugs and runtime errors"
+      },
+      "security_audit": {
+        "enabled": true,
+        "priority": "critical",
+        "description": "Identify security vulnerabilities"
+      },
+      "performance_optimization": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Suggest performance improvements"
+      },
+      "code_complexity": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Analyze code complexity and maintainability"
+      },
+      "documentation_generation": {
+        "enabled": false,
+        "priority": "low",
+        "description": "Generate comprehensive documentation"
+      },
+      "refactoring_suggestions": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Suggest code refactoring improvements"
+      },
+      "architecture_review": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Review architectural aspects"
+      },
+      "maintainability": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Assess code maintainability"
+      },
+      "testing_recommendations": {
+        "enabled": true,
+        "priority": "medium",
+        "description": "Suggest testing improvements"
+      },
+      "dependency_analysis": {
+        "enabled": true,
+        "priority": "low",
+        "description": "Analyze dependencies and coupling"
+      }
+    },
+    "file_size_limits": {
+      "max_file_size_bytes": 50000,
+      "skip_large_files": true,
+      "large_file_warning": true
+    },
+    "output_settings": {
+      "include_confidence_scores": true,
+      "include_code_snippets": true,
+      "max_findings_per_file": 20,
+      "group_similar_findings": true
+    },
+    "exclusions": {
+      "skip_file_patterns": [
+        "*.test.cpp",
+        "*.spec.cpp",
+        "*_test.cpp",
+        "*_spec.cpp",
+        "test_*.cpp",
+        "spec_*.cpp"
+      ],
+      "skip_directories": [
+        "node_modules",
+        ".git",
+        "build",
+        "dist",
+        "vendor",
+        "third_party"
+      ]
+    }
+  },
+  "integration_settings": {
+    "combine_with_cpp_analysis": true,
+    "cpp_analysis_priority": "high",
+    "ai_analysis_priority": "medium",
+    "deduplicate_findings": true,
+    "merge_similar_issues": true
+  },
+  "reporting": {
+    "default_format": "text",
+    "include_summary": true,
+    "include_statistics": true,
+    "include_recommendations": true,
+    "pr_comment_max_issues": 15,
+    "pr_comment_max_files": 10
+  }
+} 
