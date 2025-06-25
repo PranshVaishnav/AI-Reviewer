@@ -1,0 +1,311 @@
+name: Comprehensive Code Analysis (C++ Guidelines + AI)
+
+on:
+  pull_request:
+    paths:
+      - '**/*.cpp'
+      - '**/*.cc'
+      - '**/*.cxx'
+      - '**/*.c'
+      - '**/*.hpp'
+      - '**/*.h'
+      - '**/*.hxx'
+      - '**/*.py'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.java'
+      - '**/*.go'
+      - '**/*.rs'
+
+jobs:
+  comprehensive-code-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Fetch full history for comparison
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Get changed files
+      id: changed-files
+      run: |
+        # Get list of changed C++ files
+        CPP_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '\.(cpp|cc|cxx|c|hpp|h|hxx)$' | tr '\n' ' ')
+        # Get list of all changed supported files for AI analysis
+        ALL_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '\.(cpp|cc|cxx|c|hpp|h|hxx|py|js|ts|java|go|rs|php|rb|swift|kt)$' | tr '\n' ' ')
+        
+        echo "cpp_files=$CPP_FILES" >> $GITHUB_OUTPUT
+        echo "all_files=$ALL_FILES" >> $GITHUB_OUTPUT
+        echo "Changed C++ files: $CPP_FILES"
+        echo "All changed files for AI analysis: $ALL_FILES"
+    
+    - name: Run Comprehensive Code Analysis
+      id: analysis
+      if: steps.changed-files.outputs.all_files != ''
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        # Run integrated analysis with both C++ guidelines and AI analysis
+        echo "Running comprehensive analysis on changed files..."
+        
+        # Check if AI analysis is available (API key set)
+        AI_AVAILABLE="false"
+        if [ -n "$OPENAI_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ]; then
+          AI_AVAILABLE="true"
+          echo "✅ AI analysis enabled"
+        else
+          echo "⚠️ AI analysis disabled (no API key found)"
+          echo "To enable AI analysis, add OPENAI_API_KEY or ANTHROPIC_API_KEY to repository secrets"
+        fi
+        
+        # Run the integrated analyzer
+        if [ "$AI_AVAILABLE" = "true" ]; then
+          # Run with AI analysis enabled
+          python3 integrated_code_analyzer.py --format json --output analysis_result.json --ai-analysis-types bug_detection security_audit performance_optimization ${{ steps.changed-files.outputs.all_files }}
+          python3 integrated_code_analyzer.py --format pr-comment --output pr_comment.md ${{ steps.changed-files.outputs.all_files }}
+        else
+          # Run with only C++ guidelines (AI disabled)
+          python3 integrated_code_analyzer.py --disable-ai --format json --output analysis_result.json ${{ steps.changed-files.outputs.cpp_files }}
+          python3 integrated_code_analyzer.py --disable-ai --format pr-comment --output pr_comment.md ${{ steps.changed-files.outputs.cpp_files }}
+        fi
+        
+        # Also generate a detailed text report
+        python3 integrated_code_analyzer.py --format text --output analysis_report.txt ${{ steps.changed-files.outputs.all_files }} || echo "Detailed report generation failed, continuing..."
+        
+        # Extract metrics from JSON report
+        if [ -f analysis_result.json ]; then
+          CRITICAL=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['summary']['critical'])" 2>/dev/null || echo "0")
+          HIGH=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['summary']['high'])" 2>/dev/null || echo "0")
+          MEDIUM=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['summary']['medium'])" 2>/dev/null || echo "0")
+          LOW=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['summary']['low'])" 2>/dev/null || echo "0")
+          INFO=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['summary']['info'])" 2>/dev/null || echo "0")
+          TOTAL=$(python3 -c "import json; data=json.load(open('analysis_result.json')); print(data['total_issues'])" 2>/dev/null || echo "0")
+          
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
+          echo "low=$LOW" >> $GITHUB_OUTPUT
+          echo "info=$INFO" >> $GITHUB_OUTPUT
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "ai_enabled=$AI_AVAILABLE" >> $GITHUB_OUTPUT
+          
+          echo "Analysis completed:"
+          echo "- Critical: $CRITICAL"
+          echo "- High: $HIGH"
+          echo "- Medium: $MEDIUM"
+          echo "- Low: $LOW"
+          echo "- Info: $INFO"
+          echo "- Total: $TOTAL"
+        else
+          echo "❌ Analysis failed - no results file generated"
+          echo "critical=0" >> $GITHUB_OUTPUT
+          echo "high=0" >> $GITHUB_OUTPUT
+          echo "medium=0" >> $GITHUB_OUTPUT
+          echo "low=0" >> $GITHUB_OUTPUT
+          echo "info=0" >> $GITHUB_OUTPUT
+          echo "total=0" >> $GITHUB_OUTPUT
+          echo "ai_enabled=$AI_AVAILABLE" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Upload analysis results
+      if: steps.changed-files.outputs.all_files != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: comprehensive-analysis-results
+        path: |
+          analysis_result.json
+          analysis_report.txt
+          pr_comment.md
+    
+    - name: Find existing comment
+      if: steps.changed-files.outputs.all_files != ''
+      uses: actions/github-script@v6
+      id: find-comment
+      with:
+        script: |
+          const comments = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.data.find(comment => 
+            comment.user.type === 'Bot' && 
+            (comment.body.includes('🔍 Comprehensive Code Analysis Report') || 
+             comment.body.includes('📋 C++ Code Guidelines Analysis Results'))
+          );
+          
+          return botComment ? botComment.id : null;
+    
+    - name: Update or create PR comment
+      if: steps.changed-files.outputs.all_files != ''
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let commentBody = '';
+          
+          // Try to use the pre-generated PR comment first
+          if (fs.existsSync('pr_comment.md')) {
+            commentBody = fs.readFileSync('pr_comment.md', 'utf8');
+            console.log('Using pre-generated PR comment');
+          } else {
+            // Fallback to generating comment from JSON data
+            console.log('Generating comment from analysis results...');
+            
+            try {
+              const analysisData = JSON.parse(fs.readFileSync('analysis_result.json', 'utf8'));
+              const aiEnabled = '${{ steps.analysis.outputs.ai_enabled }}' === 'true';
+              
+              commentBody = `## 🔍 Comprehensive Code Analysis Report\n\n`;
+              commentBody += `*Last updated: ${new Date().toISOString()}*\n\n`;
+              
+              // Add analysis coverage info
+              if (aiEnabled) {
+                commentBody += `🤖 **AI Analysis**: ✅ Enabled (with C++ Guidelines)\n`;
+                commentBody += `📊 **Coverage**: Bug detection, security audit, performance optimization, and C++ coding standards\n\n`;
+              } else {
+                commentBody += `🏗️ **Analysis**: C++ Guidelines Only\n`;
+                commentBody += `💡 **Tip**: Add OpenAI or Anthropic API key to repository secrets for AI-powered analysis\n\n`;
+              }
+              
+              // Add summary
+              const summary = analysisData.summary || {};
+              const total = analysisData.total_issues || 0;
+              
+              commentBody += `### Summary\n`;
+              commentBody += `- 🔴 **Critical**: ${summary.critical || 0}\n`;
+              commentBody += `- 🟠 **High**: ${summary.high || 0}\n`;
+              commentBody += `- 🟡 **Medium**: ${summary.medium || 0}\n`;
+              commentBody += `- 🟢 **Low**: ${summary.low || 0}\n`;
+              commentBody += `- 🔵 **Info**: ${summary.info || 0}\n`;
+              commentBody += `- **Total**: ${total} issues\n\n`;
+              
+              if (total === 0) {
+                commentBody += `✅ **Excellent!** No issues found in the analyzed code.\n`;
+              } else {
+                // Add status indicator
+                if ((summary.critical || 0) > 0) {
+                  commentBody += `❌ **Status**: CRITICAL - This PR has critical issues that must be addressed\n\n`;
+                } else if ((summary.high || 0) > 0) {
+                  commentBody += `⚠️ **Status**: HIGH PRIORITY - This PR has high priority issues that should be addressed\n\n`;
+                } else if ((summary.medium || 0) > 0) {
+                  commentBody += `⚠️ **Status**: REVIEW REQUIRED - This PR has issues that should be reviewed\n\n`;
+                }
+                
+                // Add detailed report if available
+                if (fs.existsSync('analysis_report.txt')) {
+                  const reportText = fs.readFileSync('analysis_report.txt', 'utf8');
+                  commentBody += `<details>\n<summary>📝 Detailed Report (click to expand)</summary>\n\n`;
+                  commentBody += `\`\`\`\n${reportText.slice(0, 8000)}\n\`\`\`\n\n</details>\n`;
+                }
+                
+                // Add helpful tips
+                commentBody += `\n### 💡 Getting Started\n`;
+                if (aiEnabled) {
+                  commentBody += `This analysis combines traditional C++ guidelines with AI-powered insights:\n`;
+                  commentBody += `- **C++ Guidelines**: Naming conventions, formatting, best practices\n`;
+                  commentBody += `- **AI Analysis**: Bug detection, security vulnerabilities, performance optimization\n`;
+                } else {
+                  commentBody += `This analysis covers C++ coding guidelines. For more comprehensive analysis including bug detection and security review, add an AI API key to your repository secrets.\n`;
+                }
+                
+                commentBody += `\n**Common fixes:**\n`;
+                commentBody += `- Use PascalCase for classes/functions, camelCase for variables\n`;
+                commentBody += `- Add include guards (#pragma once) to header files\n`;
+                commentBody += `- Prefer smart pointers over raw pointers\n`;
+                commentBody += `- Add comprehensive comments for public APIs\n`;
+              }
+              
+            } catch (error) {
+              console.error('Error generating comment:', error);
+              commentBody = `## 🔍 Code Analysis Report\n\n❌ Analysis completed but failed to generate detailed report.\nPlease check the workflow logs for more information.\n\n*Last updated: ${new Date().toISOString()}*`;
+            }
+          }
+          
+          // Update existing comment or create new one
+          const existingCommentId = ${{ steps.find-comment.outputs.result }};
+          
+          if (existingCommentId) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingCommentId,
+              body: commentBody
+            });
+            console.log('Updated existing comment');
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+            console.log('Created new comment');
+          }
+    
+
+    - name: Set status based on analysis results
+      if: steps.changed-files.outputs.all_files != ''
+      run: |
+        CRITICAL=${{ steps.analysis.outputs.critical }}
+        HIGH=${{ steps.analysis.outputs.high }}
+        MEDIUM=${{ steps.analysis.outputs.medium }}
+        LOW=${{ steps.analysis.outputs.low }}
+        INFO=${{ steps.analysis.outputs.info }}
+        TOTAL=${{ steps.analysis.outputs.total }}
+        AI_ENABLED=${{ steps.analysis.outputs.ai_enabled }}
+        
+        echo "Comprehensive Analysis Results:"
+        echo "- Critical: $CRITICAL"
+        echo "- High: $HIGH"
+        echo "- Medium: $MEDIUM"
+        echo "- Low: $LOW"
+        echo "- Info: $INFO"
+        echo "- Total issues: $TOTAL"
+        echo "- AI Analysis: $AI_ENABLED"
+        
+        # Determine exit status based on severity
+        if [ "$CRITICAL" -gt 0 ]; then
+          echo "❌ CRITICAL: Found $CRITICAL critical issue(s)"
+          echo "This PR has critical issues that MUST be addressed before merging."
+          exit 1
+        elif [ "$HIGH" -gt 0 ]; then
+          echo "⚠️ HIGH PRIORITY: Found $HIGH high priority issue(s)"
+          echo "This PR has high priority issues that should be addressed before merging."
+          # Don't exit 1 for high priority - allow merge but flag for review
+          echo "::notice title=High Priority Issues::Found $HIGH high priority issues that should be addressed"
+        elif [ "$MEDIUM" -gt 0 ]; then
+          echo "⚠️ REVIEW REQUIRED: Found $MEDIUM medium priority issue(s)"
+          echo "Please review these issues before merging."
+          echo "::notice title=Medium Priority Issues::Found $MEDIUM medium priority issues for review"
+        elif [ "$TOTAL" -gt 0 ]; then
+          echo "ℹ️ INFO: Found $TOTAL low priority or informational issue(s)"
+          echo "These are suggestions for code improvement."
+        else
+          echo "✅ Analysis completed successfully - no issues found!"
+          if [ "$AI_ENABLED" = "true" ]; then
+            echo "🤖 AI-powered analysis found no bugs, security issues, or performance problems."
+          fi
+        fi
+    
+    - name: Handle no supported files changed
+      if: steps.changed-files.outputs.all_files == ''
+      run: |
+        echo "ℹ️ No supported files were changed in this PR - skipping analysis"
+        echo "Supported file types: .cpp, .cc, .cxx, .c, .hpp, .h, .hxx, .py, .js, .ts, .java, .go, .rs, .php, .rb, .swift, .kt" 
